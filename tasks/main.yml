@@ -1,0 +1,63 @@
+- name: Supported OS by this playbook
+  debug:
+    msg: "{{ ansible_distribution }} {{ ansible_distribution_version }} is not supported (only RHEL 7 is supported)"
+  when: not ( ansible_os_family == 'RedHat' and ( ansible_distribution_major_version == '7' ))
+  failed_when: true
+  ignore_errors: false
+
+- name: Install Jenkins repo
+  get_url:
+    url: https://pkg.jenkins.io/redhat-stable/jenkins.repo
+    dest: /etc/yum.repos.d/jenkins.repo
+    mode: '0644'
+    owner: root
+    group: root
+
+- name: Import a Jenkins key
+  rpm_key:
+    state: present
+    key: https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+
+- name: Install Jenkins and Java 11
+  package:
+    name:
+      - java-11-openjdk
+      - jenkins
+    state: present
+  register: packages
+
+- name: Daemon reload
+  systemd:
+    daemon_reload: true
+
+- name: Open port 8080 on the firewall(d) level
+  firewalld:
+    port: 8080/tcp
+    permanent: true
+    state: enabled
+    immediate: true
+
+- name: Open Jenkins service on the firewall(d) level
+  firewalld:
+    service: jenkins
+    permanent: true
+    state: enabled
+    immediate: true
+
+- name: Start and enable Jenkins service
+  service:
+    name: jenkins
+    enabled: yes
+    state: started
+
+- name: Check Jenkins admin password
+  command: cat /var/lib/jenkins/secrets/initialAdminPassword
+  register: jenkins_admin_pass
+  changed_when: false
+
+- name: Info about further steps
+  debug:
+    msg:
+      - 1) Go to http://{{ inventory_hostname }}:8080
+      - 2) Use this as a password -> {{ jenkins_admin_pass.stdout }}
+      - 3) Continue with plugin install and other stuff...
